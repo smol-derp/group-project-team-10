@@ -400,33 +400,6 @@
   border-bottom: none;
 }
 
-.grade-view-toggle {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 22px;
-}
-
-.grade-view-toggle button {
-  flex: 1;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.grade-view-toggle button:hover {
-  border-color: var(--accent-border);
-}
-
-.grade-view-toggle button.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
-}
-
 .course-section-rmp {
   margin-top: 4px;
   font-size: 12px;
@@ -446,4 +419,10 @@
   color: var(--accent);
   margin-bottom: 8px;
   font-weight: 500;
+}
+.grade-distribution-unavailable {
+  margin-top: 8px;
+  color: var(--text);
+  font-size: 12px;
+  opacity: 0.7;
 }

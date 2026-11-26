@@ -95,8 +95,6 @@ function CourseCard({ course, prereqs, sections = [], onSectionAdded }) {
   const [expanded, setExpanded] = useState(false)
   const [showSections, setShowSections] = useState(false)
   const [gradeModal, setGradeModal] = useState(null)
-  const [gradeView, setGradeView] = useState('professor')
-  const [courseGradeDistribution, setCourseGradeDistribution] = useState(null)
   const [conflictModal, setConflictModal] = useState(null)
   const [prereqModal, setPrereqModal] = useState(null)
 
@@ -169,22 +167,23 @@ function CourseCard({ course, prereqs, sections = [], onSectionAdded }) {
     addSectionWithoutPrereqCheck(scheduledSection)
   }
 
-  async function openGradeModal(section) {
-    setGradeModal(section)
-    setGradeView('professor')
-    setCourseGradeDistribution(null)
+  async function openOverallGradeModal() {
+    const modal = { kind: 'course', loading: true }
+    setGradeModal(modal)
 
     try {
       const response = await fetch(
         `/api/grade-distributions/course?courseNumber=${encodeURIComponent(course.courseCode)}`
       )
-
-      if (response.ok) {
-        const data = await response.json()
-        setCourseGradeDistribution(data)
-      }
-    } catch (error) {
-      console.error('Failed to load overall course grade distribution', error)
+      if (!response.ok) throw new Error('Failed to load grade distribution')
+      const distribution = await response.json()
+      setGradeModal(current => current === modal
+        ? { kind: 'course', distribution }
+        : current)
+    } catch {
+      setGradeModal(current => current === modal
+        ? { kind: 'course', error: 'Overall grade distribution could not be loaded. Please try again.' }
+        : current)
     }
   }
 
@@ -278,6 +277,16 @@ function CourseCard({ course, prereqs, sections = [], onSectionAdded }) {
           </div>
         )}
 
+        <div className="grade-distribution-area">
+          <button
+            type="button"
+            className="grade-distribution-toggle"
+            onClick={openOverallGradeModal}
+          >
+            View Overall Grade Distribution
+          </button>
+        </div>
+
         {sections.length > 0 && (
           <div className="course-card-section-area">
             <button
@@ -321,15 +330,19 @@ function CourseCard({ course, prereqs, sections = [], onSectionAdded }) {
                             </div>
                         )}
 
-                        {section.gradeDistributions?.length > 0 && (
+                        {section.gradeDistributions?.length > 0 ? (
                           <div className="grade-distribution-area">
                             <button
                               type="button"
                               className="grade-distribution-toggle"
-                              onClick={() => openGradeModal(section)}
+                              onClick={() => setGradeModal({ kind: 'professor', section })}
                             >
                               View Grade Distribution
                             </button>
+                          </div>
+                        ) : (
+                          <div className="grade-distribution-unavailable">
+                            Grade distribution data unavailable for this professor
                           </div>
                         )}
                       </div>
@@ -357,21 +370,17 @@ function CourseCard({ course, prereqs, sections = [], onSectionAdded }) {
       </div>
 
       {gradeModal && (() => {
-        const professorDistribution = getCombinedDistribution(
-          gradeModal.gradeDistributions
-        )
-
-        const combined =
-          gradeView === 'course' && courseGradeDistribution
-            ? courseGradeDistribution
-            : professorDistribution
+        const isProfessor = gradeModal.kind === 'professor'
+        const combined = isProfessor
+          ? getCombinedDistribution(gradeModal.section.gradeDistributions)
+          : gradeModal.distribution
 
         const grades = [
-          { grade: 'A', count: combined.aCount },
-          { grade: 'B', count: combined.bCount },
-          { grade: 'C', count: combined.cCount },
-          { grade: 'D', count: combined.dCount },
-          { grade: 'F', count: combined.fCount },
+          { grade: 'A', count: combined?.aCount },
+          { grade: 'B', count: combined?.bCount },
+          { grade: 'C', count: combined?.cCount },
+          { grade: 'D', count: combined?.dCount },
+          { grade: 'F', count: combined?.fCount },
         ]
 
         return (
@@ -391,9 +400,9 @@ function CourseCard({ course, prereqs, sections = [], onSectionAdded }) {
                   <h3>Grade Distribution</h3>
 
                   <div className="grade-modal-subtitle">
-                    {gradeView === 'course'
+                    {!isProfessor
                       ? `${course.courseCode} · All Professors`
-                      : `${course.courseCode} · ${gradeModal.instructor || 'Instructor TBA'}`}
+                      : `${course.courseCode} · ${gradeModal.section.instructor || 'Instructor TBA'}`}
                   </div>
                 </div>
 
@@ -407,63 +416,55 @@ function CourseCard({ course, prereqs, sections = [], onSectionAdded }) {
                 </button>
               </div>
 
-              <div className="grade-view-toggle">
-                <button
-                  type="button"
-                  className={gradeView === 'course' ? 'active' : ''}
-                  onClick={() => setGradeView('course')}
-                >
-                  Overall Course
-                </button>
+              {gradeModal.loading && <div role="status">Loading overall grade distribution...</div>}
+              {gradeModal.error && <div role="alert">{gradeModal.error}</div>}
+              {!isProfessor && combined && combined.total === 0 && (
+                <div>Grade distribution data unavailable for this course</div>
+              )}
+              {combined && (isProfessor || combined.total > 0) && (
+                <>
+                  <div className="grade-chart">
+                    {grades.map(item => {
+                      const percentage =
+                        combined.total > 0
+                          ? (item.count / combined.total) * 100
+                          : 0
 
-                <button
-                  type="button"
-                  className={gradeView === 'professor' ? 'active' : ''}
-                  onClick={() => setGradeView('professor')}
-                >
-                  This Professor
-                </button>
-              </div>
-              <div className="grade-chart">
-                {grades.map(item => {
-                  const percentage =
-                    combined.total > 0
-                      ? (item.count / combined.total) * 100
-                      : 0
-
-                  return (
-                    <div
-                      className="grade-chart-row"
-                      key={item.grade}
-                    >
-                      <div className="grade-chart-label">
-                        {item.grade}
-                      </div>
-
-                      <div className="grade-chart-track">
+                      return (
                         <div
-                          className="grade-chart-bar"
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
+                          className="grade-chart-row"
+                          key={item.grade}
+                        >
+                          <div className="grade-chart-label">
+                            {item.grade}
+                          </div>
 
-                      <div className="grade-chart-value">
-                        {percentage.toFixed(1)}%
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+                          <div className="grade-chart-track">
+                            <div
+                              className="grade-chart-bar"
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
 
-              <div className="grade-modal-total">
-                Based on {combined.total} grades
-              </div>
+                          <div className="grade-chart-value">
+                            {percentage.toFixed(1)}%
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
 
-              {gradeView === 'professor' && (
+                  <div className="grade-modal-total">
+                    Based on {combined.total} grades
+                  </div>
+                </>
+              )}
+
+              {isProfessor && (
                 <div className="grade-history">
                   <h4>Semester History</h4>
 
-                  {gradeModal.gradeDistributions.map(
+                  {gradeModal.section.gradeDistributions.map(
                     (distribution, index) => (
                       <div
                         className="grade-history-row"
